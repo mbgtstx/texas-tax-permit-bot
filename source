@@ -1,0 +1,154 @@
+import time
+import os
+import traceback
+import sys
+import requests
+import simplejson as json
+import os
+from selenium.webdriver.common.by import By
+import undetected_chromedriver as uc
+from openpyxl import load_workbook, Workbook
+from selenium.webdriver.common.by import By
+import simplejson as json
+import undetected_chromedriver as uc
+
+abspath = os.path.abspath(sys.argv[0])
+dname = os.path.dirname(abspath)
+os.chdir(dname)
+
+def clear():
+    if os.name == 'nt':
+        _ = os.system('cls')
+    else:
+        _ = os.system('clear')
+
+def STPH():
+    DATA = []
+    
+    with open(os.path.abspath('url.txt'), 'r') as f:
+        URL = [line.rstrip('\n') for line in f]
+        URL = URL[0]
+    
+    wb = load_workbook(filename='input.xlsx').active
+    INPUTS = []
+    for row in wb.rows:
+        ROW = []
+        for r in row:
+            ROW.append(r.value)
+        INPUTS.append(ROW)
+    INPUTS = INPUTS[1:]
+    
+    wbx = Workbook()
+    ws = wbx.active
+    ws.append(["LOCATION", "Business Name", "Address", "City", "State", "Zip Code"])
+    wbx.save("ExtractedData.xlsx")
+    wbx.close()
+    
+    opts = uc.ChromeOptions()
+    opts.add_argument('--disable-popup-blocking')
+    driver = uc.Chrome(options=opts)
+    
+    driver.get(URL)
+    time.sleep(3)
+    
+    all_cookies = driver.get_cookies();
+    cookies_dict = {}
+    for cookie in all_cookies:
+        cookies_dict[cookie['name']] = cookie['value']
+    print(cookies_dict)
+    
+    print("\n[+] Scraping all records from website...")
+    datas = []
+    loopNum = 0
+    while True:
+        url = f"https://data.texas.gov/api/id/{URL.split('/')[-1]}.json?$select=`taxpayer_number`,`taxpayer_name`,`taxpayer_address`,`taxpayer_city`,`taxpayer_state`,`taxpayer_zip_code`,`taxpayer_county_code`,`taxpayer_organization_type`,`outlet_number`,`outlet_name`,`outlet_address`,`outlet_city`,`outlet_state`,`outlet_zip_code`,`outlet_county_code`,`outlet_naics_code`,`outlet_inside_outside_city_limits_indicator`,`outlet_permit_issue_date`,`outlet_first_sales_date`&$order=`:id` ASC&$limit=100000&$offset={100000*loopNum}"
+
+        payload = {}
+        headers = {
+        'Host': 'data.texas.gov',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/114.0',
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': f'{URL}',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Connection': 'keep-alive',
+        'Cookie': f'_frontend_session={cookies_dict["_frontend_session"]}; socrata-csrf-token={cookies_dict["socrata-csrf-token"]}',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origi'
+        }
+
+        response = requests.request("GET", url, headers=headers, data=payload)
+        datax = json.loads(response.text)
+        datas += datax
+        
+        if len(datax) == 0:
+            break
+        
+        loopNum += 1
+        
+    print(f"\n[+] Total Records Found: {len(datas)}")
+    time.sleep(3)
+
+    for INPUT in INPUTS:
+        found = False
+        for data in datas:
+            if str(INPUT[5]).strip() == str(data['outlet_zip_code']).strip():
+                A = INPUT[0]
+                B = data['outlet_name']
+                C = data['outlet_address']
+                D = data['outlet_city']
+                E = data['outlet_state']
+                F = data['outlet_zip_code']
+                
+                if [A, B, C, D, E, F] not in DATA:
+                    found = True
+                    DATA.append([A, B, C, D, E, F])
+                    
+                    print(f"\n[+] Added: {[A, B, C, D, E, F]}")
+                    
+                    wbx = load_workbook(filename="ExtractedData.xlsx")
+                    ws = wbx.active
+                    ws.append([A, B, C, D, E, F])
+                    wbx.save("ExtractedData.xlsx")
+                    wbx.close()
+                    break
+            else:
+                pass
+            
+        if not found:
+            print(f"\n[+] Not Found")
+            wbx = load_workbook(filename="ExtractedData.xlsx")
+            ws = wbx.active
+            ws.append(INPUT)
+            wbx.save("ExtractedData.xlsx")
+            wbx.close()
+        
+    driver.quit()
+    input("\n[+] Process Complete!")
+    
+while True:
+    opt = int(input("+=================================================================+\n"
+                    "|                 TXDATA BOT TAX PERMIT EXTRACTOR                 |\n"
+                    "+=================================================================+\n"
+                    "|                                                                 |\n"
+                    "|                        SELECT OPTION                            |\n"
+                    "|                      '''''''''''''''''                          |\n"
+                    "|       1. START BOT                                              |\n"
+                    "|       2. EXIT BOT                                               |\n"
+                    "|                                                                 |\n"
+                    "+=================================================================+\n"
+                    "|         SELECT OPTION TO START THE BOT | EXAMPLE:   >>1         |\n"
+                    "+=================================================================+\n"
+                    ">>"))
+
+    if opt == 1:
+        STPH()
+    elif opt == 2:
+        exit()
+    else:
+        print("\n"
+              "Incorrect option selected. Try Again.\n")
+        time.sleep(2)
+    clear()
